@@ -54,14 +54,7 @@ class RPDR_query():
             print("Single MRN per obeservation!")
 
         df = pd.DataFrame(data, columns=header)
-
         return df
-
-    def sqlout(self):
-        df = self.read_data
-        conn = sqlite3.connect('')
-        df.to_sql(self.name, conn, if_exist='replace', index=False)
-
 
 def parsing_keywords(fileitem):
     keywords = []
@@ -79,9 +72,25 @@ def parse_patterns(fileitem):
     f.close()
     return patterns
 
+def create_connection(db_file):
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        print(sqlite3.version)
+    except ValueError as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+def sqlout(name=None, df=None, db_file=''):
+    create_connection(db_file)
+    conn = sqlite3.connect(db_file)
+    df.to_sql(name, conn, if_exist='replace', index=False)
+
 def read_matched(data=None, matchtype="exact", byvar=None, flagname = None, reffl=None, outcols=[],
                  timevar=None, sdate=None, edate=None,
-                 outtype="pd", sqltblname=None, subset=True):
+                 outtype="pd", sqltblname=None, connection=None, subset=True):
     # data : pandas dataframe
     # matchtype : string(possible value ["exact", "pattern"])
     # byvar : string(name for the variable to be matched upon)
@@ -131,8 +140,7 @@ def read_matched(data=None, matchtype="exact", byvar=None, flagname = None, reff
     if outtype == "pd":
         return datacopy
     if outtype == "sql":
-        conn = sqlite3.connect('')
-        datacopy.to_sql(sqltblname, conn, if_exist='replace', index=False)
+        sqlout(name=sqltblname, df=datacopy, db_file=connection)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scripts for RPDR file pre-processing')
