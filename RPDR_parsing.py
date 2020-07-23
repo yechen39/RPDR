@@ -3,6 +3,8 @@ import pandas as pd
 import re
 import sqlite3
 import json
+from functools import reduce
+import operator
 
 
 class RPDR_query():
@@ -12,7 +14,7 @@ class RPDR_query():
         self.name = name
         self.filein = filein
         self.instance_count += 1
-        print(self.get_attr())
+        self.get_attr()
 
     def get_attr(self):
         filelist = self.parse_filelist()
@@ -68,7 +70,7 @@ class matchterm():
         self.name = name
         self.filein = filein
         self.instance_count += 1
-        print(self.get_attr())
+        self.get_attr()
 
     def get_attr(self):
         with open(self.filein, 'r') as f:
@@ -131,7 +133,7 @@ def testitemout(rpdrobj=None, testitem=None):
         header = f.readline()
         header = header.strip().split('|')
     f.close()
-    testloc = [i for i, j in enumerate(header) if j in testitem]
+    testloc = [i for i, j in enumerate(header) if j == testitem][0]
     item = set()
     for file in filelist:
         with open(file, 'r') as f:
@@ -141,9 +143,6 @@ def testitemout(rpdrobj=None, testitem=None):
                     item.add(parse_line[testloc])
         f.close()
     return item
-
-
-
 
 
 def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
@@ -156,7 +155,7 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
     # reffl : filepath(to the file with all the keywords/patterns to be matched upon)
     # outcols : list(with names for the variables for customized output, if empty, all variables will be in ouput)
     # timevar : string(name for the time variable to be matched upon, optional)
-    # edate : string(end date in "%Y-%M-%D", optional)
+    # edate : string(end date in "%M-%D-%D"/"%", optional)
     # sdata : string(start date in "%Y-%M-%D", optional)
     # if timevar is given but edate and sdata are not given, the data will only be sorted by ID and time
     # outtype: string(possible value ["pd", "sql"])
@@ -177,13 +176,15 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                 if n == 0:
                     parse_line = line.strip().split('|')
                     header = parse_line
-                    mloc = [i for i, j in enumerate(header) if j in matchterm.keys]
+                    mloc = [i for i, j in enumerate(header) if j in matchterm.keys()]
+                    mvar = [j for i, j in enumerate(header) if j in matchterm.keys()]
+                    kp = [matchterm[i]["KP"] for i in mvar]
+                    method = [matchterm[i]["Method"] for i in mvar]
                 n += 1
                 if 'EMPI|' not in line:
-                    # map
                     parse_line = line.strip().split('|')
-                    match = list(map(kp_match, parse_line[mloc], matchterm.values["KP"], matchterm.values["Method"]))
-                    if sum(match):
+                    match = list(map(kp_match, list(map(parse_line.__getitem__, mloc)), kp, method))
+                    if reduce(operator.and_, match):
                         data.append(parse_line)
                         IDlist.add(parse_line[0])
                         MRN_len = max(MRN_len, len(parse_line[3].split(',')))
@@ -203,7 +204,7 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
             df = df.loc[(df[str(timevar)] >= sdate) & (df[str(timevar)] <= edate)]
 
     if outcols:
-        df = df[[outcols]]
+        df = df[outcols]
 
     if outtype == "pd":
         return df
