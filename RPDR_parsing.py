@@ -147,7 +147,7 @@ def testitemout(rpdrobj=None, testitem=None):
 
 def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                  timevar=None, sdate=None, edate=None,
-                 outcols=[],
+                 outcols=[], logic="AND",
                  sqltblname=None, connection=None):
     # data : pandas dataframe
     # matchtype : string(possible value ["exact", "pattern"])
@@ -184,7 +184,11 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                 if 'EMPI|' not in line:
                     parse_line = line.strip().split('|')
                     match = list(map(kp_match, list(map(parse_line.__getitem__, mloc)), kp, method))
-                    if reduce(operator.and_, match):
+                    if reduce(operator.and_, match) and logic=="AND":
+                        data.append(parse_line)
+                        IDlist.add(parse_line[0])
+                        MRN_len = max(MRN_len, len(parse_line[3].split(',')))
+                    if reduce(operator.or_, match) and logic=="OR":
                         data.append(parse_line)
                         IDlist.add(parse_line[0])
                         MRN_len = max(MRN_len, len(parse_line[3].split(',')))
