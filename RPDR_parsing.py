@@ -45,12 +45,14 @@ class RPDR_query():
                     if n == 0:
                         parse_line = line.strip().split('|')
                         header = parse_line
+                        idloc = [i for i, j in enumerate(header) if j == 'EMPI']
+                        #mrnloc = [i for i, j in enumerate(header) if j == 'MRN']
                     n += 1
                     if 'EMPI|' not in line:
                         parse_line = line.strip().split('|')
                         data.append(parse_line)
-                        IDlist.add(parse_line[0])
-                        MRN_len = max(MRN_len, len(parse_line[3].split(',')))
+                        IDlist.update(list(map(parse_line.__getitem__, idloc)))
+                        #MRN_len = max(MRN_len, len(list(map(parse_line.__getitem__, mrnloc))))
             f.close()
         print('File {} includes {} subjects with {} rows'.format(self.name, len(IDlist), n-len(filelist)))
         if n-len(filelist) > len(IDlist):
@@ -59,9 +61,14 @@ class RPDR_query():
             print("Single entry per subject!")
         if MRN_len > 1:
             print("Multiple MRNs per obeservation!")
-        else:
-            print("Single MRN per obeservation!")
+        #else:
+            #print("Single MRN per obeservation!")
         return header, data
+
+    def lst2pd(self):
+        header, data = self.read_data()
+        df = pd.DataFrame(data=data, columns=header)
+        return df
 
 class matchterm():
     instance_count = 0
@@ -149,26 +156,13 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                  timevar=None, sdate=None, edate=None,
                  outcols=[], logic="AND",
                  sqltblname=None, connection=None):
-    # data : pandas dataframe
-    # matchtype : string(possible value ["exact", "pattern"])
-    # byvar : string(name for the variable to be matched upon)
-    # reffl : filepath(to the file with all the keywords/patterns to be matched upon)
-    # outcols : list(with names for the variables for customized output, if empty, all variables will be in ouput)
-    # timevar : string(name for the time variable to be matched upon, optional)
-    # edate : string(end date in "%M-%D-%D"/"%", optional)
-    # sdata : string(start date in "%Y-%M-%D", optional)
-    # if timevar is given but edate and sdata are not given, the data will only be sorted by ID and time
-    # outtype: string(possible value ["pd", "sql"])
-    # sqltblname: string(name for output sql table, necessary of outtype is "sql")
-    # subset: boolean(whether the final output will be a subset or a full set based on rows)
 
     filelist = rpdrobj.parse_filelist()
     matchterm = matchtermobj.parse_matchterm()
     n = 0
+    l = 0
     data = []
-    header = []
-    mloc = []
-    MRN_len = 0
+    #MRN_len = 0
     IDlist = set()
     for file in filelist:
         with open(file, 'r') as f:
@@ -176,6 +170,8 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                 if n == 0:
                     parse_line = line.strip().split('|')
                     header = parse_line
+                    idloc = [i for i, j in enumerate(header) if j == 'EMPI']
+                    #mrnloc = [i for i, j in enumerate(header) if j == 'MRN']
                     mloc = [i for i, j in enumerate(header) if j in matchterm.keys()]
                     mvar = [j for i, j in enumerate(header) if j in matchterm.keys()]
                     kp = [matchterm[i]["KP"] for i in mvar]
@@ -184,31 +180,36 @@ def read_matched(rpdrobj=None, matchtermobj=None, outtype="pd",
                 if 'EMPI|' not in line:
                     parse_line = line.strip().split('|')
                     match = list(map(kp_match, list(map(parse_line.__getitem__, mloc)), kp, method))
-                    if reduce(operator.and_, match) and logic=="AND":
+                    if reduce(operator.and_, match) and logic == "AND":
+                        l += 1
                         data.append(parse_line)
-                        IDlist.add(parse_line[0])
-                        MRN_len = max(MRN_len, len(parse_line[3].split(',')))
-                    if reduce(operator.or_, match) and logic=="OR":
+                        IDlist.update(list(map(parse_line.__getitem__, idloc)))
+                        #MRN_len = max(MRN_len, len(parse_line[mrnloc].split(',')))
+                    if reduce(operator.or_, match) and logic == "OR":
+                        l += 1
                         data.append(parse_line)
-                        IDlist.add(parse_line[0])
-                        MRN_len = max(MRN_len, len(parse_line[3].split(',')))
+                        IDlist.update(list(map(parse_line.__getitem__, idloc)))
+                        #MRN_len = max(MRN_len, len(parse_line[mrnloc].split(',')))
         f.close()
-    print('File {} includes {} subjects with {} rows'.format(str(rpdrobj), len(IDlist), n - len(filelist)))
+    print('File {} includes {} subjects with {} rows after matching {}'.format(rpdrobj.name, len(IDlist), l, matchtermobj.name))
 
 
     # output format
-    df = pd.DataFrame(data=data,columns=header)
+    df = pd.DataFrame(data=data, columns=header)
+    del data
     if timevar:
         df[str(timevar)] = pd.to_datetime(df[str(timevar)])
         if not edate and sdate:
             df = df.loc[df[str(timevar)] >= sdate]
         if edate and not sdate:
-            df = df.loc[df[str(timevar)] >= edate]
+            df = df.loc[df[str(timevar)] <= edate]
         if edate and sdate:
             df = df.loc[(df[str(timevar)] >= sdate) & (df[str(timevar)] <= edate)]
 
     if outcols:
         df = df[outcols]
+
+    df[str(matchtermobj.name)] = 1
 
     if outtype == "pd":
         return df
